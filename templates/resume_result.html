@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+    <body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-col-md12">
+                <div class="layui-card">
+                    <div class="layui-card-header">匹配结果</div>
+                    <div class="layui-card-body">
+                        <table class="layui-table">
+                            <colgroup>
+                                <col width="150">
+                                <col width="200">
+                                <col width="100">
+                                <col width="150">
+                                <col width="150">
+                                <col width="200">
+                                <col width="200">
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>职位名称</th>
+                                    <th>公司名称</th>
+                                    <th>薪资</th>
+                                    <th>地点</th>
+                                    <th>匹配度</th>
+                                    <th>匹配技能点</th>
+                                    <th>缺失技能点</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for result in results %}
+                                <tr>
+                                    <td>{{ result.title }}</td>
+                                    <td>{{ result.company }}</td>
+                                    <td>{{ result.salary }}</td>
+                                    <td>{{ result.place }}</td>
+                                    <td>{{ result.score|floatformat:4 }}</td>
+                                    <td>
+                                        {% if result.required_skills %}
+                                            {% for skill in result.required_skills %}
+                                                {% if skill not in result.missing_skills %}
+                                                    <span class="layui-badge layui-bg-green">{{ skill }}</span>
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% else %}
+                                            无
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if result.missing_skills %}
+                                            {% for skill in result.missing_skills %}
+                                                <span class="layui-badge layui-bg-red">{{ skill }}</span>
+                                            {% endfor %}
+                                        {% else %}
+                                            无
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        <br>
+                        <a href="/resume_match/" class="layui-btn">返回上传页面</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </body>
+{% endblock %}
+
+{% block js %}
+    <script>
+        layui.config({
+            base: '{% static "layuiadmin/" %}' //静态资源所在路径
+        }).extend({
+            index: 'lib/index' //主入口模块
+        }).use(['index', 'table'], function () {
+            var $ = layui.$,
+                table = layui.table;
+
+            // 渲染表格
+            table.render({
+                elem: '.layui-table',
+                data: {{ results|safe }},
+                page: true,
+                limit: 10
+            });
+        });
+    </script>
+{% endblock %}

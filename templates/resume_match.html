@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+    <body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-col-md12">
+                <div class="layui-card">
+                    <div class="layui-card-header">简历匹配</div>
+                    <div class="layui-card-body">
+                        <div class="layui-form" lay-filter="">
+                            <div class="layui-form-item">
+                                <label class="layui-form-label">上传简历</label>
+                                <div class="layui-input-block">
+                                    <form action="/upload_resume/" method="post" enctype="multipart/form-data">
+                                        {% csrf_token %}
+                                        <div class="layui-upload">
+                                            <button type="button" class="layui-btn" id="upload_resume">选择文件</button>
+                                            <div class="layui-upload-list">
+                                                <input type="file" name="resume" id="resume_file" accept=".txt,.pdf,.docx" style="display: none;">
+                                                <p id="upload_text">请选择要上传的简历文件 (支持txt, pdf, docx格式)</p>
+                                            </div>
+                                        </div>
+                                        <br>
+                                        <button class="layui-btn" type="submit" lay-submit lay-filter="upload_form">开始匹配</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </body>
+{% endblock %}
+
+{% block js %}
+    <script>
+        layui.config({
+            base: '{% static "layuiadmin/" %}' //静态资源所在路径
+        }).extend({
+            index: 'lib/index' //主入口模块
+        }).use(['index', 'form', 'upload'], function () {
+            var $ = layui.$,
+                layer = layui.layer
+                , form = layui.form
+                , upload = layui.upload;
+
+            // 监听文件选择
+            $('#upload_resume').on('click', function() {
+                $('#resume_file').click();
+            });
+
+            $('#resume_file').on('change', function() {
+                var file = this.files[0];
+                if (file) {
+                    $('#upload_text').text('已选择文件: ' + file.name);
+                }
+            });
+
+            form.on('submit(upload_form)', function (data) {
+                var file = $('#resume_file')[0].files[0];
+                if (!file) {
+                    layer.msg("请选择要上传的简历文件！");
+                    return false;
+                }
+                return true;
+            });
+        });
+    </script>
+{% endblock %}
