@@ -56,6 +56,7 @@ pip install -r requirements.txt
 - Django 3.2.8
 - django-simpleui 2024.8.28
 - selenium 4.15.2
+- undetected-chromedriver 3.5.4 (用于绕过反爬检测)
 - weasyprint 59.0 (用于生成 PDF 报告)
 - pdfminer.six 20231228 (用于解析 PDF 简历)
 - python-docx 0.8.11 (用于解析 DOCX 简历)
@@ -90,8 +91,25 @@ python manage.py runserver
 
 六、爬虫与调度
 ----
-- 爬虫实现位于 [job/tools.py](job/tools.py#L1-L400)，基于 Selenium + chromedriver。请把 `chromedriver.exe` 放到 [job/](job/)
+- 爬虫实现位于 [job/tools.py](job/tools.py#L1-L400)，基于 Selenium + undetected-chromedriver。该库能自动 patch Chrome 的指纹，绕过大多数反爬检测，有效解决爬虫被拒绝访问的问题。
+
+- **解决爬虫被拒绝的措施**：
+  - 使用 `undetected-chromedriver` 替代普通的 ChromeDriver
+  - 配置 Chrome 选项忽略 SSL 错误和模拟真实浏览器
+  - 添加必要的浏览器选项以提高爬虫稳定性
+
+- **依赖安装**：
+  项目已包含 `undetected-chromedriver==3.5.4` 依赖，安装依赖时会自动安装：
+  ```powershell
+  pip install -r requirements.txt
+  ```
+
+- **注意事项**：
+  - 首次运行 undetected-chromedriver 会自动下载匹配的 ChromeDriver，可能需要几分钟
+  - 无需手动下载或配置 chromedriver.exe，系统会自动管理
+
 - 推荐在管理员后台或定时任务（如 Windows Task Scheduler / cron）中运行爬虫；仅管理员具有调度/触发权限。
+
 - 命令行示例（直接触发）：
 ```powershell
 python -c "from job.tools import lieSpider; lieSpider('java','北京','1')"

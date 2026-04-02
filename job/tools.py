@@ -9,14 +9,11 @@ from multiprocessing.dummy import Pool
 import pymysql
 
 import os
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+import undetected_chromedriver as uc
 from selenium.webdriver.chrome.options import Options
 
 # 获取当前文件的目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# 指定 chromedriver 的路径
-driver_path = os.path.join(current_dir, 'chromedriver.exe')  # 确保 chromedriver 文件名是正确的
 
 
 # city, all_page, spider_code
@@ -102,9 +99,6 @@ def get_city():
     print('开始抓取城市列表...')
 
     chrome_options = Options()
-    chrome_options.add_argument('--headless')  # 无头模式
-    chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--no-sandbox')
     # 忽略 SSL 错误
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument('--ignore-ssl-errors')
@@ -114,10 +108,13 @@ def get_city():
     chrome_options.add_argument('--disable-popup-blocking')
     # 禁用扩展
     chrome_options.add_argument('--disable-extensions')
+    # 其他选项
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
 
-    # 使用 Service 指定 chromedriver 路径
-    service = Service(driver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    # 使用 undetected_chromedriver
+    driver = uc.Chrome(options=chrome_options, version_main=None)
 
     try:
         driver.get('https://www.liepin.com/zhaopin/?inputFrom=head_navigation&scene=init&workYearCode=0&ckId=ayvlgrooqq8e4w2b3yoae69sd91dmbq9')
@@ -146,9 +143,6 @@ def get_liepin_pages(url):
     print(f'开始爬取猎聘网 {url}...')
 
     chrome_options = Options()
-    chrome_options.add_argument('--headless')
-    chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--no-sandbox')
     # 忽略 SSL 错误
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument('--ignore-ssl-errors')
@@ -158,9 +152,13 @@ def get_liepin_pages(url):
     chrome_options.add_argument('--disable-popup-blocking')
     # 禁用扩展
     chrome_options.add_argument('--disable-extensions')
+    # 其他选项
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
 
-    service = Service(driver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    # 使用 undetected_chromedriver
+    driver = uc.Chrome(options=chrome_options, version_main=146)
 
     try:
         driver.get(url)
@@ -176,6 +174,12 @@ def get_liepin_pages(url):
         com_name = req_html.xpath('//span[@class="jsx-2387891236 company-name ellipsis-1"]/text()')
         tag_list = req_html.xpath('//div[@class="jsx-2387891236 company-tags-box ellipsis-1"]')
         href_list = req_html.xpath('//a[@data-nick="job-detail-job-info"]/@href')
+        # 提取技能要求
+        skills_list = []
+        skills_elements = req_html.xpath('//div[@class="jsx-2387891236 job-tags-box"]')
+        for skills in skills_elements:
+            skill_items = skills.xpath('./span/text()')
+            skills_list.append(','.join(skill_items) if skill_items else '')
 
         # 处理标签信息
         label_list = []
@@ -190,7 +194,7 @@ def get_liepin_pages(url):
                 scale_list.append('')
 
         # 确保所有列表长度一致
-        lists = [name, salary, address, education, experience, com_name, label_list, scale_list, href_list]
+        lists = [name, salary, address, education, experience, com_name, label_list, scale_list, href_list, skills_list]
         min_length = min(len(lst) for lst in lists)
         for lst in lists:
             lst[:] = lst[:min_length]
@@ -200,13 +204,15 @@ def get_liepin_pages(url):
         cur.execute(select_sql)
         href_list_mysql = [x[0] for x in cur.fetchall()]
 
-        insert_sql = '''INSERT INTO job_data(name, salary, place, education, experience, company, label, scale, href, key_word) 
-                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
+        insert_sql = '''INSERT INTO job_data(name, salary, place, education, experience, company, label, scale, href, key_word, required_skills) 
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
 
         for i in range(min_length):
             href = href_list[i].split('?')[0]
             if href not in href_list_mysql:
-                data = (name[i], salary[i], address[i], education[i], experience[i], com_name[i], label_list[i], scale_list[i], href, url.split('=')[-1])
+                # 确保 skills_list 有足够的元素
+                required_skills = skills_list[i] if i < len(skills_list) else ''
+                data = (name[i], salary[i], address[i], education[i], experience[i], com_name[i], label_list[i], scale_list[i], href, url.split('=')[-1], required_skills)
                 try:
                     cur.execute(insert_sql, data)
                     conn.commit()
@@ -236,9 +242,6 @@ def get_zhilian_pages(url):
     print(f'开始爬取智联招聘 {url}...')
 
     chrome_options = Options()
-    chrome_options.add_argument('--headless')
-    chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--no-sandbox')
     # 忽略 SSL 错误
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument('--ignore-ssl-errors')
@@ -248,9 +251,13 @@ def get_zhilian_pages(url):
     chrome_options.add_argument('--disable-popup-blocking')
     # 禁用扩展
     chrome_options.add_argument('--disable-extensions')
+    # 其他选项
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
 
-    service = Service(driver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    # 使用 undetected_chromedriver
+    driver = uc.Chrome(options=chrome_options, version_main=None)
 
     try:
         driver.get(url)
@@ -266,6 +273,14 @@ def get_zhilian_pages(url):
         com_name = req_html.xpath('//a[@class="joblist-box__item-companyname"]/text()')
         tag_list = req_html.xpath('//div[@class="joblist-box__item-tag"]')
         href_list = req_html.xpath('//a[@class="joblist-box__item-info"]/@href')
+        # 提取技能要求
+        skills_list = []
+        skills_elements = req_html.xpath('//div[@class="joblist-box__item-tag"]')
+        for skills in skills_elements:
+            skill_items = skills.xpath('./span/text()')
+            # 过滤掉公司类型和规模信息，只保留技能标签
+            skill_filtered = [item for item in skill_items if item not in ['计算机软件', 'IT服务', '互联网', '100-499人', '2000-5000人', '10000人以上']]
+            skills_list.append(','.join(skill_filtered) if skill_filtered else '')
 
         # 处理标签信息
         label_list = []
@@ -280,7 +295,7 @@ def get_zhilian_pages(url):
                 scale_list.append('')
 
         # 确保所有列表长度一致
-        lists = [name, salary, address, education, experience, com_name, label_list, scale_list, href_list]
+        lists = [name, salary, address, education, experience, com_name, label_list, scale_list, href_list, skills_list]
         min_length = min(len(lst) for lst in lists)
         for lst in lists:
             lst[:] = lst[:min_length]
@@ -290,13 +305,15 @@ def get_zhilian_pages(url):
         cur.execute(select_sql)
         href_list_mysql = [x[0] for x in cur.fetchall()]
 
-        insert_sql = '''INSERT INTO job_data(name, salary, place, education, experience, company, label, scale, href, key_word) 
-                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
+        insert_sql = '''INSERT INTO job_data(name, salary, place, education, experience, company, label, scale, href, key_word, required_skills) 
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
 
         for i in range(min_length):
             href = href_list[i].split('?')[0]
             if href not in href_list_mysql:
-                data = (name[i], salary[i], address[i], education[i], experience[i], com_name[i], label_list[i], scale_list[i], href, url.split('kw=')[-1].split('&')[0])
+                # 确保 skills_list 有足够的元素
+                required_skills = skills_list[i] if i < len(skills_list) else ''
+                data = (name[i], salary[i], address[i], education[i], experience[i], com_name[i], label_list[i], scale_list[i], href, url.split('kw=')[-1].split('&')[0], required_skills)
                 try:
                     cur.execute(insert_sql, data)
                     conn.commit()

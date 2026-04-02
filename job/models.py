@@ -26,7 +26,6 @@ class JobData(models.Model):
     href = models.CharField('职位链接', max_length=255, blank=True, null=True)  # 职位链接
     key_word = models.CharField('关键词', max_length=255, blank=True, null=True)  # 关键词
     required_skills = models.CharField('必需技能(逗号分隔)', max_length=1024, blank=True, null=True)
-    required_skills = models.CharField('必需技能(逗号分隔)', max_length=1024, blank=True, null=True)
 
     class Meta:
         managed = True  # 是否由Django管理
