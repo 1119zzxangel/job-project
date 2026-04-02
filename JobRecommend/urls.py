@@ -38,10 +38,16 @@ urlpatterns = [
     path('send_page/', views.send_page, name="send_page"),  # 已投递列表
     path('pass_page/', views.pass_page, name="pass_page"),
     path('up_info/', views.up_info, name="up_info"),  # 修改信息
+    path('profile/', views.update_profile, name="update_profile"),  # 更新个人信息（头像/联系方式）
+    path('request_reset/', views.request_password_reset, name="request_password_reset"),
+    path('reset_password/', views.reset_password, name="reset_password"),
     path('salary/', views.salary, name="salary"),
     path('edu/', views.edu, name="edu"),
     path('bar_page/', views.bar_page, name="bar_page"),
     path('bar/', views.bar, name="bar"),
     path('resume_match/', views.resume_match, name="resume_match"),  # 简历匹配页面
     path('upload_resume/', views.upload_resume, name="upload_resume"),  # 上传简历处理
+    path('match_report/', views.match_report, name='match_report'),
+    path('download_report_html/', views.download_report_html, name='download_report_html'),
+    path('download_report_pdf/', views.download_report_pdf, name='download_report_pdf'),
 ]

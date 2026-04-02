@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<div class="layui-card">
+    <div class="layui-card-header">匹配报告 - {{ report.title }}</div>
+    <div class="layui-card-body">
+        <h3>摘要</h3>
+        <p>职位: {{ report.title }} | 公司: {{ report.company }} | 薪资: {{ report.salary }} | 地点: {{ report.place }}</p>
+        <p>综合匹配度: <strong>{{ report.score }}</strong></p>
+        <h4>分项得分</h4>
+        <ul>
+            <li>文本相似度: {{ report.text_similarity }}</li>
+            <li>技能得分: {{ report.skills_score }}</li>
+            <li>经验得分: {{ report.experience_score }}</li>
+            <li>学历得分: {{ report.education_score }}</li>
+        </ul>
+        <h4>技能对比</h4>
+        <p>已掌握: {% for s in report.matched_skills %}<span class="layui-badge layui-bg-green">{{ s }}</span> {% endfor %}</p>
+        <p>缺失: {% for s in report.missing_skills %}<span class="layui-badge layui-bg-red">{{ s }}</span> {% endfor %}</p>
+
+        <div id="chart" style="width:100%;height:400px;"></div>
+
+        <div style="margin-top:16px;">
+            <a href="/download_report_html/?job_id={{ report.id }}" class="layui-btn">下载 HTML 报告</a>
+            <a href="/download_report_pdf/?job_id={{ report.id }}" class="layui-btn">下载 PDF 报告</a>
+            <a href="/resume_match/" class="layui-btn">返回</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<!-- 只保留这一个 echarts，删掉多余的 -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var chartDom = document.getElementById('chart');
+    if (!chartDom) return;
+    var myChart = echarts.init(chartDom);
+
+    // 使用模板渲染的值，转为字符串再 parseFloat 以防止未定义
+    var skillsScore = parseFloat('{{ report.skills_score|default:0 }}') || 0;
+    var expScore = parseFloat('{{ report.experience_score|default:0 }}') || 0;
+    var eduScore = parseFloat('{{ report.education_score|default:0 }}') || 0;
+
+    var option = {
+        title: {
+            text: '技能与维度雷达图',
+            left: 'center'
+        },
+        tooltip: {},
+        radar: {
+            radius: '70%',
+            indicator: [
+                { name: '技能得分', max: 1 },
+                { name: '经验得分', max: 1 },
+                { name: '学历得分', max: 1 }
+            ]
+        },
+        series: [{
+            name: '匹配详情',
+            type: 'radar',
+            data: [
+                {
+                    value: [skillsScore, expScore, eduScore],
+                    name: '匹配得分',
+                    itemStyle: { color: '#40a9ff' },
+                    areaStyle: { opacity: 0.3 }
+                }
+            ]
+        }]
+    };
+
+    myChart.setOption(option);
+    window.addEventListener('resize', function () { myChart.resize(); });
+});
+</script>
+{% endblock %}

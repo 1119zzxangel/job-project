@@ -18,6 +18,7 @@ if __name__ == '__main__':
     django.setup()
 
     from django.contrib.auth import get_user_model
+    from django.contrib.auth.hashers import make_password
     from job.models import UserList
 
     User = get_user_model()
@@ -30,7 +31,8 @@ if __name__ == '__main__':
     # 同步到 UserList 表，设置 role=admin
     if not UserList.objects.filter(user_id=username).exists():
         print('Creating UserList admin record')
-        UserList.objects.create(user_id=username, user_name=username, pass_word=password, role='admin')
+        # store hashed password for UserList pass_word
+        UserList.objects.create(user_id=username, user_name=username, pass_word=make_password(password), role='admin')
     else:
         ul = UserList.objects.get(user_id=username)
         if ul.role != 'admin':

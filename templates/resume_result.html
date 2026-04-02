@@ -8,6 +8,15 @@
                 <div class="layui-card">
                     <div class="layui-card-header">匹配结果</div>
                     <div class="layui-card-body">
+                        <div style="margin-bottom:16px;">
+                            <strong>简历解析摘要：</strong>
+                            {% if resume %}
+                                学历：{{ resume.education }}；经验：{{ resume.total_experience_years }} 年；技能：
+                                {% for s in resume.skills %}
+                                    <span class="layui-badge layui-bg-green">{{ s }}</span>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
                         <table class="layui-table">
                             <colgroup>
                                 <col width="150">
@@ -24,7 +33,10 @@
                                     <th>公司名称</th>
                                     <th>薪资</th>
                                     <th>地点</th>
-                                    <th>匹配度</th>
+                                    <th>匹配度(0-100)</th>
+                                    <th>技能得分</th>
+                                    <th>经验得分</th>
+                                    <th>学历得分</th>
                                     <th>匹配技能点</th>
                                     <th>缺失技能点</th>
                                 </tr>
@@ -36,7 +48,10 @@
                                     <td>{{ result.company }}</td>
                                     <td>{{ result.salary }}</td>
                                     <td>{{ result.place }}</td>
-                                    <td>{{ result.score|floatformat:4 }}</td>
+                                    <td>{{ result.score }}</td>
+                                    <td>{{ result.skills_score }}</td>
+                                    <td>{{ result.experience_score }}</td>
+                                    <td>{{ result.education_score }}</td>
                                     <td>
                                         {% if result.required_skills %}
                                             {% for skill in result.required_skills %}
