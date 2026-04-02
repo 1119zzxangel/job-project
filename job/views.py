@@ -122,7 +122,8 @@ def spiders(request):
 
 def start_spider(request):
     # 权限检查：只有管理员可以访问
-    if request.session.get('user_role') != 'admin':
+    # 支持两种登录方式：1. 项目自定义登录（session 中的 user_role）2. Django admin 登录（is_superuser）
+    if request.session.get('user_role') != 'admin' and not (request.user.is_authenticated and request.user.is_superuser):
         return JsonResponse({"code": 1, "msg": "无权限操作"})
 
     if request.method == "POST":

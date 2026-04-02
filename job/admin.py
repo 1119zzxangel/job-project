@@ -73,6 +73,19 @@ class SpiderInfoAdmin(admin.ModelAdmin):
         self.message_user(request, f"已标记 {updated} 条为失败")
     mark_failed.short_description = '标记为失败'
 
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        from job import tools
+        # 检查是否有爬虫正在运行
+        extra_context['spider_code'] = getattr(tools, 'spider_code', 0)
+        return super().changelist_view(request, extra_context)
+
+    class Media:
+        js = ('https://cdn.jsdelivr.net/npm/layui@2.7.6/dist/layui.js',)
+        css = {
+            'all': ('https://cdn.jsdelivr.net/npm/layui@2.7.6/dist/css/layui.css',)
+        }
+
 admin.site.register(SpiderInfo, SpiderInfoAdmin)
 
 class UserExpectAdmin(admin.ModelAdmin):

@@ -52,6 +52,18 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+项目依赖库包括：
+- Django 3.2.8
+- django-simpleui 2024.8.28
+- selenium 4.15.2
+- weasyprint 59.0 (用于生成 PDF 报告)
+- pdfminer.six 20231228 (用于解析 PDF 简历)
+- python-docx 0.8.11 (用于解析 DOCX 简历)
+- scikit-learn 1.5.0 (用于文本相似度计算)
+- numpy 2.0.0
+- psutil 5.9.6
+- lxml 4.9.3
+
 2. 配置数据库与环境变量：
 - 推荐将敏感配置放到环境变量或 `.env`，不要直接写入 `JobRecommend/settings.py`。可参考 `JobRecommend/settings.py` 的连接位置 [JobRecommend/settings.py](JobRecommend/settings.py#L1-L200)。
 
@@ -91,7 +103,9 @@ python -c "from job.tools import lieSpider; lieSpider('java','北京','1')"
 - 配置： [JobRecommend/settings.py](JobRecommend/settings.py#L1-L200)
 - 推荐引擎： [job/job_recommend.py](job/job_recommend.py#L1-L200)
 - 爬虫： [job/tools.py](job/tools.py#L1-L400)
-- 视图与路由： [job/views.py](job/views.py#L1-L400)
+- 视图与路由： [job/views.py](job/views.py#L1-L680)
+- 简历解析： [job/utils/resume_parser.py](job/utils/resume_parser.py#L1-L146)
+- 相似度匹配： [job/algorithms/similarity_match.py](job/algorithms/similarity_match.py#L1-L53)
 - 静态/模板： `templates/` 与 `static/` 目录
 
 八、运维建议与安全

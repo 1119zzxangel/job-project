@@ -105,6 +105,15 @@ def get_city():
     chrome_options.add_argument('--headless')  # 无头模式
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--no-sandbox')
+    # 忽略 SSL 错误
+    chrome_options.add_argument('--ignore-certificate-errors')
+    chrome_options.add_argument('--ignore-ssl-errors')
+    # 添加 user-agent 模拟真实浏览器
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+    # 禁用浏览器弹窗
+    chrome_options.add_argument('--disable-popup-blocking')
+    # 禁用扩展
+    chrome_options.add_argument('--disable-extensions')
 
     # 使用 Service 指定 chromedriver 路径
     service = Service(driver_path)
@@ -140,6 +149,15 @@ def get_liepin_pages(url):
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--no-sandbox')
+    # 忽略 SSL 错误
+    chrome_options.add_argument('--ignore-certificate-errors')
+    chrome_options.add_argument('--ignore-ssl-errors')
+    # 添加 user-agent 模拟真实浏览器
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+    # 禁用浏览器弹窗
+    chrome_options.add_argument('--disable-popup-blocking')
+    # 禁用扩展
+    chrome_options.add_argument('--disable-extensions')
 
     service = Service(driver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -221,6 +239,15 @@ def get_zhilian_pages(url):
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--no-sandbox')
+    # 忽略 SSL 错误
+    chrome_options.add_argument('--ignore-certificate-errors')
+    chrome_options.add_argument('--ignore-ssl-errors')
+    # 添加 user-agent 模拟真实浏览器
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+    # 禁用浏览器弹窗
+    chrome_options.add_argument('--disable-popup-blocking')
+    # 禁用扩展
+    chrome_options.add_argument('--disable-extensions')
 
     service = Service(driver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
