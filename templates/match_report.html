@@ -7,6 +7,7 @@
         <h3>摘要</h3>
         <p>职位: {{ report.title }} | 公司: {{ report.company }} | 薪资: {{ report.salary }} | 地点: {{ report.place }}</p>
         <p>综合匹配度: <strong>{{ report.score }}</strong></p>
+        <p>解析方法: {% if resume.parse_method == 'llm' %}大模型解析{% else %}关键词解析{% endif %}</p>
         <h4>分项得分</h4>
         <ul>
             <li>文本相似度: {{ report.text_similarity }}</li>
@@ -18,7 +19,35 @@
         <p>已掌握: {% for s in report.matched_skills %}<span class="layui-badge layui-bg-green">{{ s }}</span> {% endfor %}</p>
         <p>缺失: {% for s in report.missing_skills %}<span class="layui-badge layui-bg-red">{{ s }}</span> {% endfor %}</p>
 
-        <div id="chart" style="width:100%;height:400px;"></div>
+        <h4>匹配度最高的前10个岗位</h4>
+        <table class="layui-table" lay-size="sm">
+            <thead>
+                <tr>
+                    <th>排名</th>
+                    <th>职位</th>
+                    <th>公司</th>
+                    <th>薪资</th>
+                    <th>地点</th>
+                    <th>匹配度</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in top_jobs %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ job.title }}</td>
+                    <td>{{ job.company }}</td>
+                    <td>{{ job.salary }}</td>
+                    <td>{{ job.place }}</td>
+                    <td>{{ job.score }}</td>
+                    <td>
+                        <a href="/match_report/?job_id={{ job.id }}" class="layui-btn layui-btn-xs">查看详情</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
 
         <div style="margin-top:16px;">
             <a href="/download_report_html/?job_id={{ report.id }}" class="layui-btn">下载 HTML 报告</a>
@@ -30,49 +59,4 @@
 {% endblock %}
 
 {% block js %}
-<!-- 只保留这一个 echarts，删掉多余的 -->
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var chartDom = document.getElementById('chart');
-    if (!chartDom) return;
-    var myChart = echarts.init(chartDom);
-
-    // 使用模板渲染的值，转为字符串再 parseFloat 以防止未定义
-    var skillsScore = parseFloat('{{ report.skills_score|default:0 }}') || 0;
-    var expScore = parseFloat('{{ report.experience_score|default:0 }}') || 0;
-    var eduScore = parseFloat('{{ report.education_score|default:0 }}') || 0;
-
-    var option = {
-        title: {
-            text: '技能与维度雷达图',
-            left: 'center'
-        },
-        tooltip: {},
-        radar: {
-            radius: '70%',
-            indicator: [
-                { name: '技能得分', max: 1 },
-                { name: '经验得分', max: 1 },
-                { name: '学历得分', max: 1 }
-            ]
-        },
-        series: [{
-            name: '匹配详情',
-            type: 'radar',
-            data: [
-                {
-                    value: [skillsScore, expScore, eduScore],
-                    name: '匹配得分',
-                    itemStyle: { color: '#40a9ff' },
-                    areaStyle: { opacity: 0.3 }
-                }
-            ]
-        }]
-    };
-
-    myChart.setOption(option);
-    window.addEventListener('resize', function () { myChart.resize(); });
-});
-</script>
 {% endblock %}

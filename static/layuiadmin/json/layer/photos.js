@@ -1,10 +1,10 @@
 {
-  "code": 0,
-  "msg": "",
-  "title": "JSON请求的相册",
-  "id": 8,
-  "start": 0,
-  "data": [
+  "code"; 0,
+  "msg"; "",
+  "title"; "JSON请求的相册",
+  "id"; 8,
+  "start"; 0,
+  "data"; [
     {
       "alt": "layer",
       "pid": 109,

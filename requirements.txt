@@ -31,3 +31,6 @@ typing_extensions==4.8.0
 urllib3==2.1.0
 weasyprint==59.0
 wsproto==1.2.0
+volcengine
+requests==2.31.0
+openai>=1.0.0

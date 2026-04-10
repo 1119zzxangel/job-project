@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from job import models
 import re
 import builtins
+import json
 from psutil import *
 import numpy as np
 from job import tools
@@ -17,11 +18,16 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 import uuid
 from datetime import timedelta
+import threading
+import time
+
+# 任务状态存储（内存中）
+task_status = {}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-spider_code = 0  # 定义全局变量，用来识别爬虫的状态，0空闲，1繁忙
+
 
 
 # python manage.py inspectdb > job/models.py
@@ -105,64 +111,162 @@ def welcome(request):
     # print(job_data[0:10])
     job_data_1 = job_data[0]  # 取出最高薪资的职位信息
     mean_salary = int(np.mean(list_1))  # 计算平均薪资
-    spider_info = models.SpiderInfo.objects.filter(spider_id=1).first()  # 查询爬虫程序运行的数据记录
-    # print(spider_info)
     return render(request, "welcome.html", locals())
 
 
-def spiders(request):
+def model_management(request):
     # 权限检查：只有管理员可以访问
     if request.session.get('user_role') != 'admin':
         return redirect('login')
-    global spider_code
-    # print(spider_code)
-    spider_code_1 = spider_code
-    return render(request, "spiders.html", locals())
+    
+    # 获取所有模型配置
+    models = models.ModelConfig.objects.all().order_by('-is_active', '-created_at')
+    current_model = models.ModelConfig.objects.filter(is_active=True).first()
+    
+    return render(request, "modelManage.html", locals())
 
 
-def start_spider(request):
+def add_model(request):
     # 权限检查：只有管理员可以访问
-    # 支持两种登录方式：1. 项目自定义登录（session 中的 user_role）2. Django admin 登录（is_superuser）
     if request.session.get('user_role') != 'admin' and not (request.user.is_authenticated and request.user.is_superuser):
         return JsonResponse({"code": 1, "msg": "无权限操作"})
 
     if request.method == "POST":
-        # 1. 获取参数 + 全部设置默认值，防止 None
-        key_word = request.POST.get("key_word", "")
-        city = request.POST.get("city", "")
-        page = request.POST.get("page", "1")  # 默认第1页
-        role = request.POST.get("role", "")
+        model_name = request.POST.get("model_name", "").strip()
+        endpoint_id = request.POST.get("endpoint_id", "").strip()
+        api_url = request.POST.get("api_url", "").strip()
+        model_type = request.POST.get("model_type", "").strip()
+        description = request.POST.get("description", "").strip()
 
-        # 2. 页面强转 int，防止报错
+        if not model_name:
+            return JsonResponse({"code": 1, "msg": "模型名称不能为空"})
+        if not endpoint_id:
+            return JsonResponse({"code": 1, "msg": "接入点ID不能为空"})
+        if not model_type:
+            return JsonResponse({"code": 1, "msg": "模型类型不能为空"})
+
         try:
-            page_int = int(page)
-        except:
-            page_int = 1
+            # 创建新模型配置
+            model_config = models.ModelConfig.objects.create(
+                model_name=model_name,
+                endpoint_id=endpoint_id,
+                api_url=api_url,
+                model_type=model_type,
+                description=description,
+                is_active=False  # 默认不启用，需要手动切换
+            )
+            return JsonResponse({"code": 0, "msg": f"模型 '{model_name}' 添加成功"})
+        except Exception as e:
+            return JsonResponse({"code": 1, "msg": f"添加失败：{str(e)}"})
+    
+    return JsonResponse({"code": 1, "msg": "请求方式错误"})
 
-        # 3. 安全获取爬虫模型（判断非空）
-        spider_model = models.SpiderInfo.objects.filter(spider_id=1).first()
-        if spider_model:  # 必须判断！否则 None 会炸
-            spider_model.count = (spider_model.count or 0) + 1
-            spider_model.page = (spider_model.page or 0) + page_int
-            spider_model.save()
 
-        spider_code = 1
+def switch_model(request):
+    """切换当前使用的模型"""
+    # 权限检查：只有管理员可以访问
+    if request.session.get('user_role') != 'admin' and not (request.user.is_authenticated and request.user.is_superuser):
+        return JsonResponse({"code": 1, "msg": "无权限操作"})
 
-        # 4. 执行爬虫
-        if role == '猎聘网':
-            spider_code = tools.lieSpider(key_word=key_word, city=city, all_page=page)
-        elif role == '智联招聘':
-            spider_code = tools.zhilianSpider(key_word=key_word, city=city, all_page=page)
-        else:
-            return JsonResponse({"code": 1, "msg": "不支持的爬虫类型"})
+    if request.method == "POST":
+        model_id = request.POST.get("model_id", "")
+        
+        if not model_id:
+            return JsonResponse({"code": 1, "msg": "模型ID不能为空"})
+        
+        try:
+            # 获取要切换的模型
+            target_model = models.ModelConfig.objects.get(model_id=model_id)
+            
+            # 将所有模型设置为未启用
+            models.ModelConfig.objects.all().update(is_active=False)
+            
+            # 启用目标模型
+            target_model.is_active = True
+            target_model.save()
+            
+            # 更新环境变量（当前进程）
+            os.environ['DEEPSEEK_ENDPOINT_ID'] = target_model.endpoint_id
+            
+            return JsonResponse({
+                "code": 0, 
+                "msg": f"已切换到模型 '{target_model.model_name}'",
+                "endpoint_id": target_model.endpoint_id
+            })
+        except models.ModelConfig.DoesNotExist:
+            return JsonResponse({"code": 1, "msg": "模型不存在"})
+        except Exception as e:
+            return JsonResponse({"code": 1, "msg": f"切换失败：{str(e)}"})
+    
+    return JsonResponse({"code": 1, "msg": "请求方式错误"})
 
-        # 5. 返回结果
-        if spider_code == 0:
-            return JsonResponse({"code": 0, "msg": f"{role}爬取成功!"})
-        else:
-            return JsonResponse({"code": 1, "msg": f"{role}爬取失败!"})
 
-    return JsonResponse({"code": 1, "msg": "请使用POST请求"})
+def update_model(request):
+    """更新模型配置（暂不使用）"""
+    # 权限检查：只有管理员可以访问
+    if request.session.get('user_role') != 'admin' and not (request.user.is_authenticated and request.user.is_superuser):
+        return JsonResponse({"code": 1, "msg": "无权限操作"})
+
+    if request.method == "POST":
+        model_id = request.POST.get("model_id", "")
+        model_name = request.POST.get("model_name", "").strip()
+        endpoint_id = request.POST.get("endpoint_id", "").strip()
+        model_type = request.POST.get("model_type", "").strip()
+        description = request.POST.get("description", "").strip()
+
+        if not model_id:
+            return JsonResponse({"code": 1, "msg": "模型ID不能为空"})
+
+        try:
+            model_config = models.ModelConfig.objects.get(model_id=model_id)
+            if model_name:
+                model_config.model_name = model_name
+            if endpoint_id:
+                model_config.endpoint_id = endpoint_id
+            if model_type:
+                model_config.model_type = model_type
+            if description:
+                model_config.description = description
+            model_config.save()
+            return JsonResponse({"code": 0, "msg": "模型更新成功"})
+        except models.ModelConfig.DoesNotExist:
+            return JsonResponse({"code": 1, "msg": "模型不存在"})
+        except Exception as e:
+            return JsonResponse({"code": 1, "msg": f"更新失败：{str(e)}"})
+
+        # 更新模型配置
+        # 这里可以根据实际需求实现
+        return JsonResponse({"code": 0, "msg": "模型更新成功"})
+
+
+def delete_model(request):
+    """删除模型配置"""
+    # 权限检查：只有管理员可以访问
+    if request.session.get('user_role') != 'admin' and not (request.user.is_authenticated and request.user.is_superuser):
+        return JsonResponse({"code": 1, "msg": "无权限操作"})
+
+    if request.method == "POST":
+        model_id = request.POST.get("model_id", "")
+
+        if not model_id:
+            return JsonResponse({"code": 1, "msg": "模型ID不能为空"})
+
+        try:
+            model_config = models.ModelConfig.objects.get(model_id=model_id)
+            model_name = model_config.model_name
+            
+            # 如果删除的是当前启用的模型，需要清除环境变量
+            if model_config.is_active:
+                os.environ.pop('DEEPSEEK_ENDPOINT_ID', None)
+            
+            model_config.delete()
+            return JsonResponse({"code": 0, "msg": f"模型 '{model_name}' 删除成功"})
+        except models.ModelConfig.DoesNotExist:
+            return JsonResponse({"code": 1, "msg": "模型不存在"})
+        except Exception as e:
+            return JsonResponse({"code": 1, "msg": f"删除失败：{str(e)}"})
+    
+    return JsonResponse({"code": 1, "msg": "请求方式错误"})
 
 
 
@@ -307,6 +411,12 @@ def job_expect(request):
 
 def get_recommend(request):
     recommend_list = job_recommend.recommend_by_item_id(request.session.get("user_id"), 9)
+    # 为每个职位添加技能列表
+    for job in recommend_list:
+        if job.get('required_skills'):
+            job['skills_list'] = [skill.strip() for skill in job['required_skills'].split(',') if skill.strip()]
+        else:
+            job['skills_list'] = []
     # print(recommend_list)
     return render(request, "recommend.html", locals())
 
@@ -451,8 +561,204 @@ def resume_match(request):
     return render(request, "resume_match.html")
 
 
+import requests
+import json
+
+def clean_resume_text(text):
+    """清洗简历文本，去除冗余内容"""
+    import re
+    # 移除图片标记
+    text = re.sub(r'image\[\[.*?\]\]', '', text)
+    # 压缩连续空行
+    text = re.sub(r'\n\s*\n', '\n', text)
+    # 去除多余的空白字符
+    text = re.sub(r'\s+', ' ', text)
+    # 限制最大字符数
+    return text[:3000]
+
+
+def extract_resume_by_llm(resume_text):
+    """使用火山引擎 DeepSeek V3.2 大模型解析简历，使用HTTP请求"""
+    import time
+    import os
+    import logging
+    import random
+
+    logger = logging.getLogger(__name__)
+    start_time = time.time()
+    max_total_time = 360  # 6分钟超时限制
+
+    # 统一获取 API 配置
+    API_KEY = os.getenv("VOLCANO_API_KEY")
+
+    if not API_KEY:
+        logger.warning("未设置 VOLCANO_API_KEY 环境变量，使用关键字解析")
+        result = parse_resume_structured(resume_text)
+        result['parse_method'] = 'keyword'
+        result['parse_status'] = 'success'
+        return result
+
+    # 从数据库获取当前启用的模型配置
+    current_model = None
+    try:
+        current_model = models.ModelConfig.objects.filter(is_active=True).first()
+    except Exception as e:
+        logger.error(f"读取模型配置失败：{e}")
+
+    if current_model:
+        DEEPSEEK_ENDPOINT_ID = current_model.endpoint_id
+        API_URL = current_model.api_url
+        logger.info(f"使用数据库配置的模型：{current_model.model_name} ({current_model.model_type})")
+    else:
+        DEEPSEEK_ENDPOINT_ID = os.getenv("DEEPSEEK_ENDPOINT_ID")
+        API_URL = os.getenv("API_URL")
+        if not DEEPSEEK_ENDPOINT_ID:
+            logger.error("未配置模型，请在模型管理页面添加并启用模型")
+            return parse_resume_structured(resume_text)
+        if not API_URL:
+            logger.error("未配置 API_URL，请在 .env 文件中添加")
+            return parse_resume_structured(resume_text)
+        logger.info(f"使用环境变量配置的模型：{DEEPSEEK_ENDPOINT_ID}")
+
+    # 检查 API_URL 是否有效
+    if not API_URL:
+        logger.error("API_URL 为空，使用关键字解析")
+        return parse_resume_structured(resume_text)
+
+    logger.debug(f"使用 API URL：{API_URL}")
+
+    # 清洗简历文本
+    cleaned_resume = clean_resume_text(resume_text)
+    logger.info(f"清洗后简历长度：{len(cleaned_resume)} 字符")
+
+    prompt = """请严格按照以下JSON格式输出，不添加任何其他内容：
+{"skills": ["技能1", "技能2"], "education": "最高学历", "experience_year": 工作年限数字, "job_target": "期望岗位"}
+
+从简历中提取：
+- skills: 只保留技术技能（编程语言、框架、工具等），去重
+- education: 最高学历
+- experience_year: 工作年限（数字）
+- job_target: 期望岗位
+
+简历：
+"""
+
+    full_prompt = prompt + cleaned_resume
+
+    max_retries = 3  # 增加重试次数到3次
+    base_timeout = 300  # 增加基础超时时间到300秒
+
+    for attempt in range(max_retries):
+        # 检查总时间是否超过6分钟
+        elapsed_time = time.time() - start_time
+        if elapsed_time >= max_total_time:
+            logger.warning(f"大模型解析总时间超过 {max_total_time} 秒，切换到关键字解析")
+            result = parse_resume_structured(resume_text)
+            result['parse_method'] = 'keyword'
+            result['parse_status'] = 'timeout'
+            return result
+
+        try:
+            # 计算剩余时间并逐步增加超时
+            remaining_time = max_total_time - elapsed_time
+            timeout_seconds = min(base_timeout + attempt * 60, remaining_time)
+            
+            logger.info(f"尝试调用大模型 API (尝试 {attempt + 1}/{max_retries})...")
+            logger.debug(f"剩余时间: {remaining_time:.0f}秒，本次超时: {timeout_seconds:.0f}秒")
+
+            from openai import OpenAI
+            import httpx
+
+            # 完善超时配置
+            timeout = httpx.Timeout(
+                timeout=timeout_seconds,   # 总超时
+                connect=30.0,              # 连接超时
+                read=timeout_seconds,      # 读取超时
+                write=30.0                 # 写入超时
+            )
+
+            client = OpenAI(
+                api_key=API_KEY,
+                base_url=API_URL,
+                timeout=timeout
+            )
+
+            logger.debug(f"使用模型: {DEEPSEEK_ENDPOINT_ID}")
+
+            completion = client.chat.completions.create(
+                model=DEEPSEEK_ENDPOINT_ID,
+                messages=[
+                    {"role": "system", "content": "你是一个专业的简历解析助手。"},
+                    {"role": "user", "content": full_prompt}
+                ],
+                max_tokens=500,
+                temperature=0.1
+            )
+
+            logger.info("API 请求成功，正在处理响应...")
+            content = completion.choices[0].message.content
+            logger.debug(f"API响应内容：{content[:200]}...")
+
+            try:
+                json_match = re.search(r'\{[\s\S]*\}', content)
+                if json_match:
+                    parsed = json.loads(json_match.group())
+                else:
+                    parsed = json.loads(content)
+
+                logger.debug(f"解析结果：{parsed}")
+
+                # 安全转换 experience_year
+                experience_year = parsed.get('experience_year', 0)
+                try:
+                    experience_year = int(experience_year) if experience_year is not None else 0
+                except (ValueError, TypeError):
+                    experience_year = 0
+
+                result = {
+                    "skills": parsed.get('skills', []),
+                    "education": parsed.get('education', ''),
+                    "total_experience_years": experience_year,
+                    "job_target": parsed.get('job_target', '')
+                }
+                result['parse_method'] = 'llm'
+                result['parse_status'] = 'success'
+                logger.info("大模型解析成功")
+                return result
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON解析失败：{e}")
+                break
+
+        except Exception as e:
+            logger.error(f"API调用失败：{e}")
+            if attempt < max_retries - 1:
+                # 指数退避 + 抖动
+                backoff_time = min(2 ** attempt * 3, 30)  # 最大等待30秒
+                jitter = random.uniform(0, 2)
+                total_backoff = backoff_time + jitter
+                
+                # 检查剩余时间
+                elapsed_time = time.time() - start_time
+                if elapsed_time + total_backoff >= max_total_time:
+                    logger.warning("剩余时间不足，切换到关键字解析")
+                    break
+                logger.info(f"等待 {total_backoff:.1f} 秒后重试...")
+                time.sleep(total_backoff)
+                continue
+            else:
+                break
+
+    logger.info("使用关键字解析方法")
+    result = parse_resume_structured(resume_text)
+    result['parse_method'] = 'keyword'
+    result['parse_status'] = 'fallback'
+    return result
+
 def upload_resume(request):
-    """处理简历上传和匹配"""
+    """处理简历上传和匹配，带超时控制"""
+    import time
+    start_time = time.time()
+    
     if request.method == "POST":
         if 'resume' not in request.FILES:
             return JsonResponse({"code": 1, "msg": "没有找到上传文件"})
@@ -468,6 +774,7 @@ def upload_resume(request):
             # 解析文件
             try:
                 text = parse_file(save_path)
+                print(f"文件解析耗时：{time.time() - start_time:.2f}秒")
             except Exception as e:
                 return JsonResponse({"code": 1, "msg": f"解析文件失败：{e}"})
 
@@ -491,105 +798,166 @@ def upload_resume(request):
             # 执行匹配
             try:
                 results = match_resume_to_jobs(text, jobs, top_n=10)
+                print(f"匹配算法耗时：{time.time() - start_time:.2f}秒")
             except Exception as e:
                 return JsonResponse({"code": 1, "msg": f"匹配失败：{e}"})
-            # 结构化解析简历
-            structured = parse_resume_structured(text)
+            
+            # 生成任务ID
+            task_id = str(uuid.uuid4())
+            
+            # 保存必要信息到 session
+            request.session['last_resume_text'] = text
+            request.session['last_match_results'] = results
+            request.session['last_job_data'] = job_data
+            request.session['last_task_id'] = task_id
+            
+            # 初始化任务状态
+            task_status[task_id] = {
+                'status': 'processing',
+                'result': None,
+                'error': None
+            }
+            
+            # 定义后台处理函数
+            def process_resume_background():
+                try:
+                    # 使用大模型解析简历
+                    print(f"开始后台处理简历解析...")
+                    structured = extract_resume_by_llm(text)
+                    print(f"后台解析完成")
+                    
+                    # 处理匹配结果并计算分项得分
+                    enhanced = []
+                    # 权重，可配置
+                    W_TEXT = 0.7
+                    W_STRUCT = 0.3
+                    W_SKILLS = 0.6
+                    W_EXP = 0.3
+                    W_EDU = 0.1
 
-            # 处理匹配结果并计算分项得分（技能/经验/学历）以及综合得分（0-100）
-            enhanced = []
-            # 权重，可配置
-            W_TEXT = 0.7
-            W_STRUCT = 0.3
-            W_SKILLS = 0.6
-            W_EXP = 0.3
-            W_EDU = 0.1
+                    # 教育等级映射
+                    EDU_RANK = {'不限': 0, '高中': 1, '大专': 2, '本科': 3, '硕士': 4, '博士': 5}
 
-            # 教育等级映射
-            EDU_RANK = {'不限': 0, '高中': 1, '大专': 2, '本科': 3, '硕士': 4, '博士': 5}
+                    for result in results:
+                        # 查找对应的岗位信息
+                        job_info = next((job for job in job_data if job.get('job_id') == result['id']), {})
+                        # 优先使用 required_skills 字段
+                        req_skills = []
+                        required_skills = job_info.get('required_skills') or ''
+                        if required_skills:
+                            req_skills = [s.strip() for s in required_skills.split(',') if s.strip()]
+                        else:
+                            # 回退到 key_word 字段
+                            req_skills = [s.lower() for s in (job_info.get('key_word') or '').split() if s.strip()]
+                            # 如果岗位没有明确关键词，尝试从jobs结构中使用 skills 字段
+                            if not req_skills:
+                                # 尝试从职位标签或描述中拆分关键词作为技能
+                                key_word_field = job_info.get('key_word') or job_info.get('label') or job_info.get('name') or ''
+                                req_skills = [s.lower() for s in re.split(r'[,;\s/\\|]+', key_word_field) if s]
 
-            for result in results:
-                # 查找对应的岗位信息
-                job_info = next((job for job in job_data if job.get('job_id') == result['id']), {})
-                req_skills = [s.lower() for s in (job_info.get('key_word') or '').split() if s.strip()]
-                # 如果岗位没有明确关键词，尝试从jobs结构中使用 skills 字段
-                if not req_skills:
-                    # 尝试从职位标签或描述中拆分关键词作为技能
-                    key_word_field = job_info.get('key_word') or job_info.get('label') or job_info.get('name') or ''
-                    req_skills = [s.lower() for s in re.split(r'[,;\s/\\|]+', key_word_field) if s]
+                        resume_skills = [s.lower() for s in structured.get('skills', [])]
+                        present = [s for s in req_skills if s.lower() in resume_skills]
+                        missing = [s for s in req_skills if s.lower() not in resume_skills]
 
-                resume_skills = [s.lower() for s in structured.get('skills', [])]
-                present = [s for s in req_skills if s in ' '.join(resume_skills)]
-                missing = [s for s in req_skills if s not in present]
+                        # 技能得分
+                        skills_score = 1.0 if not req_skills else (len(present) / len(req_skills))
 
-                # 技能得分
-                skills_score = 1.0 if not req_skills else (len(present) / len(req_skills))
+                        # ==================== 经验得分 ====================
+                        job_exp_text = job_info.get('experience') or ''
+                        req_years = 0
+                        m = re.findall(r"(\d+)", job_exp_text)
+                        if m:
+                            req_years = int(m[0])
 
-                # ==================== 经验得分 ====================
-                job_exp_text = job_info.get('experience') or ''
-                req_years = 0
-                m = re.findall(r"(\d+)", job_exp_text)
-                if m:
-                    req_years = int(m[0])
+                        resume_years = float(structured.get('total_experience_years', 0) or 0)
 
-                resume_years = float(structured.get('total_experience_years', 0) or 0)
+                        if req_years == 0:
+                            exp_score = 1.0
+                        else:
+                            try:
+                                exp_score = builtins.min(resume_years / float(req_years), 1.0)
+                            except Exception:
+                                exp_score = 0.0
 
-                if req_years == 0:
-                    exp_score = 1.0
-                else:
-                    try:
-                        exp_score = builtins.min(resume_years / float(req_years), 1.0)
-                    except Exception:
-                        exp_score = 0.0
+                        # ==================== 学历得分 ====================
+                        job_edu = job_info.get('education') or ''
+                        job_edu_rank = 0
+                        for k in EDU_RANK:
+                            if k != '不限' and k in job_edu:
+                                job_edu_rank = EDU_RANK[k]
+                                break
 
-                # ==================== 学历得分 ====================
-                job_edu = job_info.get('education') or ''
-                job_edu_rank = 0
-                for k in EDU_RANK:
-                    if k != '不限' and k in job_edu:
-                        job_edu_rank = EDU_RANK[k]
-                        break
+                        resume_edu_rank = int(EDU_RANK.get(structured.get('education', '不限'), 0))
 
-                resume_edu_rank = int(EDU_RANK.get(structured.get('education', '不限'), 0))
+                        if job_edu_rank == 0:
+                            edu_score = 1.0
+                        else:
+                            try:
+                                edu_score = builtins.min(float(resume_edu_rank) / float(job_edu_rank), 1.0)
+                            except Exception:
+                                edu_score = 0.0
 
-                if job_edu_rank == 0:
-                    edu_score = 1.0
-                else:
-                    try:
-                        edu_score = builtins.min(float(resume_edu_rank) / float(job_edu_rank), 1.0)
-                    except Exception:
-                        edu_score = 0.0
+                        # 结构化部分得分
+                        struct_score = W_SKILLS * skills_score + W_EXP * exp_score + W_EDU * edu_score
 
-                # ==================== 最终得分 ====================
-                struct_score = W_SKILLS * skills_score + W_EXP * exp_score + W_EDU * edu_score
+                        # 文本相似度（来自算法结果）
+                        text_sim = float(result.get('score', 0.0))
 
-                # 文本相似度（来自算法结果）
-                text_sim = float(result.get('score', 0.0))
+                        # 综合得分
+                        combined = W_TEXT * text_sim + W_STRUCT * struct_score
+                        final_score = int(round(combined * 100))
 
-                combined = W_TEXT * text_sim + W_STRUCT * struct_score
-                final_score = int(round(combined * 100))
+                        enhanced.append({
+                            'id': result.get('id'),
+                            'title': result.get('title'),
+                            'company': job_info.get('company'),
+                            'salary': job_info.get('salary'),
+                            'place': job_info.get('place'),
+                            'score': final_score,
+                            'text_similarity': round(text_sim, 4),
+                            'skills_score': round(skills_score, 4),
+                            'experience_score': round(exp_score, 4),
+                            'education_score': round(edu_score, 4),
+                            'required_skills': req_skills,
+                            'matched_skills': present,
+                            'missing_skills': missing,
+                        })
 
-                enhanced.append({
-                    'id': result.get('id'),
-                    'title': result.get('title'),
-                    'company': job_info.get('company'),
-                    'salary': job_info.get('salary'),
-                    'place': job_info.get('place'),
-                    'score': final_score,
-                    'text_similarity': round(text_sim, 4),
-                    'skills_score': round(skills_score, 4),
-                    'experience_score': round(exp_score, 4),
-                    'education_score': round(edu_score, 4),
-                    'required_skills': req_skills,
-                    'matched_skills': present,
-                    'missing_skills': missing,
-                })
-
-            # 保存到session，便于查看报告与导出
-            request.session['last_resume_structured'] = structured
-            request.session['last_match_enhanced'] = enhanced
-
-            return render(request, "resume_result.html", {"results": enhanced, 'resume': structured})
+                    # 保存到session，便于查看报告与导出
+                    request.session['last_resume_structured'] = structured
+                    request.session['last_match_enhanced'] = enhanced
+                    
+                    # 更新任务状态
+                    task_status[task_id] = {
+                        'status': 'completed',
+                        'result': {
+                            'results': enhanced,
+                            'resume': structured
+                        },
+                        'error': None
+                    }
+                except Exception as e:
+                    print(f"后台处理失败：{e}")
+                    # 更新任务状态
+                    task_status[task_id] = {
+                        'status': 'failed',
+                        'result': None,
+                        'error': str(e)
+                    }
+            
+            # 启动后台线程
+            thread = threading.Thread(target=process_resume_background)
+            thread.daemon = True
+            thread.start()
+            
+            print(f"后台任务已启动，任务ID：{task_id}")
+            
+            # 返回任务ID给前端
+            return JsonResponse({
+                "code": 0, 
+                "msg": "简历解析任务已提交，请等待处理完成",
+                "task_id": task_id
+            })
         else:
             return JsonResponse({"code": 1, "msg": f"仅接受以下文件类型: {', '.join(sorted(ALLOWED_EXTENSIONS))}"})
     
@@ -597,24 +965,29 @@ def upload_resume(request):
         return redirect('resume_match')
 
 def match_report(request, job_id=None):
-    """展示指定岗位的匹配报告（从 session 中读取上次上传的匹配结果）。"""
+    """展示匹配报告，包括匹配度最高的前10个岗位。"""
     enhanced = request.session.get('last_match_enhanced') or []
     structured = request.session.get('last_resume_structured') or {}
     if not enhanced:
         return JsonResponse({"code": 1, "msg": "未找到最近的匹配结果，请先上传简历进行匹配。"})
-    # 支持通过参数 job_id 指定要展示的岗位
+    
+    # 按匹配度排序，取前10个
+    sorted_enhanced = sorted(enhanced, key=lambda x: x.get('score', 0), reverse=True)[:10]
+    
+    # 支持通过参数 job_id 指定要展示的岗位详情
     if job_id is None:
         job_id = request.GET.get('job_id')
     target = None
-    for e in enhanced:
-        if str(e.get('id')) == str(job_id):
-            target = e
-            break
-    if not target:
-        # 默认取第一条
-        target = enhanced[0]
+    if job_id:
+        for e in enhanced:
+            if str(e.get('id')) == str(job_id):
+                target = e
+                break
+    if not target and sorted_enhanced:
+        # 默认取第一个（匹配度最高的）
+        target = sorted_enhanced[0]
 
-    return render(request, 'match_report.html', {'resume': structured, 'report': target})
+    return render(request, 'match_report.html', {'resume': structured, 'report': target, 'top_jobs': sorted_enhanced})
 
 
 def download_report_html(request):
@@ -679,3 +1052,39 @@ def download_report_pdf(request):
 
 # return JsonResponse({"code": 1, "msg": f"仅接受以下文件类型: {', '.join(sorted(ALLOWED_EXTENSIONS))}"})
 # return redirect('resume_match')
+
+def check_task_status(request):
+    """检查任务状态"""
+    task_id = request.GET.get('task_id')
+    if not task_id:
+        return JsonResponse({"code": 1, "msg": "任务ID不能为空"})
+    
+    # 获取任务状态
+    if task_id not in task_status:
+        return JsonResponse({"code": 1, "msg": "任务不存在"})
+    
+    status_info = task_status[task_id]
+    status = status_info['status']
+    
+    if status == 'completed':
+        result = status_info['result']
+        return JsonResponse({
+            "code": 0, 
+            "msg": "任务完成",
+            "status": "completed",
+            "results": result['results'],
+            "resume": result['resume']
+        })
+    elif status == 'failed':
+        error = status_info['error']
+        return JsonResponse({
+            "code": 1, 
+            "msg": f"任务失败：{error}",
+            "status": "failed"
+        })
+    else:
+        return JsonResponse({
+            "code": 0, 
+            "msg": "任务处理中",
+            "status": "processing"
+        })

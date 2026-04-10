@@ -18,7 +18,7 @@
 ----
 - 系统运维与管理：用户管理（查看/重置密码/冻结/权限分配/删除）、实时系统监控（CPU/内存/任务队列）、系统配置（爬虫频率/推荐权重/数据更新时间）、操作日志和审计。
 
-- 数据全生命周期：爬虫调度（启动/停止/定时任务配置/异常处理/重试）、手动触发全量/增量爬取、数据清洗（增删改查）、数据备份与恢复、数据审核（过滤虚假/违规职位）。
+- 数据全生命周期：数据清洗（增删改查）、数据备份与恢复、数据审核（过滤虚假/违规职位）。
 
 - 运营与策略：职位上下架与置顶、推荐算法参数调整与回滚、简历脱敏查看与统计分析、生成运营报表（用户增长/抓取量/匹配成功率）。
 
@@ -34,7 +34,7 @@
 | 功能模块 | 求职者（普通用户） | 管理员（超级用户） |
 |---|---:|---:|
 | 主页（数据可视化） | 查看个人/市场数据 | 查看全量市场数据+系统监控 |
-| 爬虫调度 | ❌ 无权限 | ✅ 启动/停止/配置/监控 |
+| 模型管理 | ❌ 无权限 | ✅ 配置/切换/监控 |
 | 数据管理 | 查看/检索个人可访问数据 | 全量增删改查/审核/备份 |
 | 职位推荐 | 个人推荐 + 求职意向管理 | 全量推荐管理 + 算法配置 |
 | 简历匹配 | 上传/匹配（个人） | 简历统计/脱敏查看/匹配分析 |
@@ -55,15 +55,13 @@ pip install -r requirements.txt
 项目依赖库包括：
 - Django 3.2.8
 - django-simpleui 2024.8.28
-- selenium 4.15.2
-- undetected-chromedriver 3.5.4 (用于绕过反爬检测)
 - weasyprint 59.0 (用于生成 PDF 报告)
 - pdfminer.six 20231228 (用于解析 PDF 简历)
 - python-docx 0.8.11 (用于解析 DOCX 简历)
 - scikit-learn 1.5.0 (用于文本相似度计算)
 - numpy 2.0.0
 - psutil 5.9.6
-- lxml 4.9.3
+- openai>=1.0.0 (用于大模型调用)
 
 2. 配置数据库与环境变量：
 - 推荐将敏感配置放到环境变量或 `.env`，不要直接写入 `JobRecommend/settings.py`。可参考 `JobRecommend/settings.py` 的连接位置 [JobRecommend/settings.py](JobRecommend/settings.py#L1-L200)。
@@ -89,31 +87,37 @@ python manage.py runserver
 ```
 访问应用： http://127.0.0.1:8000/ ，后台管理： http://127.0.0.1:8000/admin/。
 
-六、爬虫与调度
+六、模型管理
 ----
-- 爬虫实现位于 [job/tools.py](job/tools.py#L1-L400)，基于 Selenium + undetected-chromedriver。该库能自动 patch Chrome 的指纹，绕过大多数反爬检测，有效解决爬虫被拒绝访问的问题。
+- 模型管理功能位于 [job/views.py](job/views.py#L610-L650) 和 [job/models.py](job/models.py#L100-L120)，支持多种大模型的配置和管理。
 
-- **解决爬虫被拒绝的措施**：
-  - 使用 `undetected-chromedriver` 替代普通的 ChromeDriver
-  - 配置 Chrome 选项忽略 SSL 错误和模拟真实浏览器
-  - 添加必要的浏览器选项以提高爬虫稳定性
+- **模型配置**：
+  - 支持添加、编辑、删除模型配置
+  - 支持设置模型名称、类型、接入点ID和API地址
+  - 支持激活/停用模型
 
 - **依赖安装**：
-  项目已包含 `undetected-chromedriver==3.5.4` 依赖，安装依赖时会自动安装：
+  项目已包含 `openai>=1.0.0` 依赖，安装依赖时会自动安装：
   ```powershell
   pip install -r requirements.txt
   ```
 
+- **环境变量配置**：
+  需要在 `.env` 文件中配置 API_KEY：
+  ```
+  API_KEY=your-api-key-here
+  ```
+
+- **使用方法**：
+  1. 登录管理员账号
+  2. 进入模型管理页面：`http://127.0.0.1:8000/models/`
+  3. 添加模型配置并激活
+  4. 系统会自动使用激活的模型进行简历解析
+
 - **注意事项**：
-  - 首次运行 undetected-chromedriver 会自动下载匹配的 ChromeDriver，可能需要几分钟
-  - 无需手动下载或配置 chromedriver.exe，系统会自动管理
-
-- 推荐在管理员后台或定时任务（如 Windows Task Scheduler / cron）中运行爬虫；仅管理员具有调度/触发权限。
-
-- 命令行示例（直接触发）：
-```powershell
-python -c "from job.tools import lieSpider; lieSpider('java','北京','1')"
-```
+  - 确保 API_KEY 正确配置
+  - 确保 API URL 和接入点ID正确
+  - 每个模型类型只能有一个激活的模型
 
 七、功能模块详细介绍
 ----
@@ -142,39 +146,33 @@ python -c "from job.tools import lieSpider; lieSpider('java','北京','1')"
 
 ---
 
-### 7.2 爬虫模块
-**功能描述**：自动从猎聘网和智联招聘网站抓取职位信息，支持多城市、多关键词、多页面的数据采集。
+### 7.2 模型管理模块
+**功能描述**：支持多种大模型的配置和管理，包括添加、编辑、删除和切换模型，为简历解析提供不同的大模型服务。
 
 **技术实现**：
-- **爬虫框架**：Selenium 4.15.2 + undetected-chromedriver 3.5.4
-- **反爬虫策略**：
-  - 使用 undetected-chromedriver 自动 patch Chrome 指纹
-  - 配置忽略 SSL 证书错误（--ignore-certificate-errors）
-  - 模拟真实浏览器 User-Agent
-  - 禁用浏览器扩展和弹窗
-  - 添加随机延迟避免被检测
-- **HTML 解析**：lxml 4.9.3 的 XPath 解析技术
-- **数据存储**：MySQL 数据库，使用 PyMySQL 1.1.0 连接
-- **并发处理**：multiprocessing.dummy.Pool 实现多线程爬取
+- **后端框架**：Django 3.2.8 ORM 系统
+- **数据模型**：ModelConfig 模型，包含模型ID、名称、类型、接入点ID、API地址、激活状态等字段
+- **前端界面**：基于 Layui 的可视化管理界面
+- **大模型调用**：使用 OpenAI SDK 统一调用接口
+- **权限控制**：基于角色的访问控制，仅管理员可访问
 
 **核心文件**：
-- 爬虫实现：[job/tools.py](job/tools.py#L1-L400)
-- 数据模型：[job/models.py](job/models.py#L5-L28)
-- 管理界面：[job/admin.py](job/admin.py#L40-L89)
+- 模型定义：[job/models.py](job/models.py#L100-L120)
+- 视图处理：[job/views.py](job/views.py#L610-L650)
+- 管理界面：[job/admin.py](job/admin.py#L80-L100)
+- 前端模板：templates/modelManage.html
 
 **主要功能**：
-- 支持猎聘网和智联招聘两个数据源
-- 自动提取职位名称、薪资、地点、学历要求、工作经验、公司信息、技能要求等
-- 支持城市列表自动获取和配置
-- 爬虫状态监控（空闲/运行中/成功/失败）
-- 爬虫调度和任务管理
-- 数据去重和异常处理
+- 模型配置管理（添加、编辑、删除）
+- 模型激活与停用
+- 模型状态监控
+- 支持多种大模型服务
+- 实时模型切换
 
-**爬取数据字段**：
-- 职位基本信息：name, salary, place, education, experience, company
-- 公司信息：label（职位标签）, scale（公司规模）
-- 技能要求：required_skills（逗号分隔的技能列表）
-- 元数据：href（职位链接）, key_word（搜索关键词）
+**模型配置字段**：
+- 模型基本信息：model_id, model_name, model_type
+- 连接信息：endpoint_id, api_url
+- 状态信息：is_active, created_at
 
 ---
 
@@ -215,16 +213,19 @@ python -c "from job.tools import lieSpider; lieSpider('java','北京','1')"
 ---
 
 ### 7.4 简历解析与匹配模块
-**功能描述**：支持多种格式的简历文件解析，自动提取技能、学历、工作经验等信息，并与职位要求进行智能匹配。
+**功能描述**：支持多种格式的简历文件解析，自动提取技能、学历、工作经验等信息，并与职位要求进行智能匹配。支持大模型解析和关键词解析两种方式。
 
 **技术实现**：
 - **文件解析**：
   - PDF 解析：pdfminer.six 20231228
   - DOCX 解析：python-docx 0.8.11
   - TXT 解析：Python 内置文件操作
-- **文本处理**：正则表达式和字符串匹配
-- **技能提取**：基于预定义技能库的关键词匹配
-  - 支持编程语言、框架、工具等多种技能类型
+- **大模型解析**：
+  - 使用 OpenAI SDK 调用大模型服务
+  - 支持多种大模型的配置和切换
+  - 异步处理，避免超时问题
+- **关键词解析**：
+  - 基于预定义技能库的关键词匹配
   - 使用词边界匹配避免误识别
 - **相似度计算**：
   - TF-IDF 向量化：scikit-learn 1.5.0 的 TfidfVectorizer
@@ -234,6 +235,7 @@ python -c "from job.tools import lieSpider; lieSpider('java','北京','1')"
 
 **核心文件**：
 - 简历解析：[job/utils/resume_parser.py](job/utils/resume_parser.py#L1-L146)
+- 大模型解析：[job/views.py](job/views.py#L580-L720)
 - 相似度匹配：[job/algorithms/similarity_match.py](job/algorithms/similarity_match.py#L1-L53)
 - 视图处理：[job/views.py](job/views.py#L1-L680)
 
@@ -245,6 +247,8 @@ python -c "from job.tools import lieSpider; lieSpider('java','北京','1')"
 - 简历与职位的智能匹配
 - 生成详细的匹配报告（包含匹配度、匹配技能、缺失技能）
 - 支持批量简历处理
+- 支持大模型解析和关键词解析两种方式
+- 自动选择当前激活的模型进行解析
 
 **匹配算法**：
 1. 将简历文本和职位技能要求转换为 TF-IDF 向量

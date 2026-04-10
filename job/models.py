@@ -55,28 +55,7 @@ class SendList(models.Model):
             return str(self.send_id)
 
 
-class SpiderInfo(models.Model):
-    spider_id = models.AutoField('爬虫ID', primary_key=True)
-    spider_name = models.CharField('爬虫名称', max_length=255, blank=True, null=True)
-    count = models.IntegerField('抓取数量', blank=True, null=True)
-    page = models.IntegerField('爬取页数', blank=True, null=True)
-    last_run = models.DateTimeField('最后爬取时间', blank=True, null=True)
-    STATUS_CHOICES = (
-        ('idle', '空闲'),
-        ('running', '运行中'),
-        ('success', '成功'),
-        ('failed', '失败'),
-    )
-    status = models.CharField('爬取状态', max_length=16, choices=STATUS_CHOICES, default='idle')
 
-    class Meta:
-        managed = True
-        db_table = 'spider_info'
-        verbose_name = '爬虫信息'
-        verbose_name_plural = '爬虫信息'
-
-    def __str__(self):
-        return self.spider_name or f"Spider {self.spider_id}"
 
 
 class UserExpect(models.Model):
@@ -127,3 +106,26 @@ class UserList(models.Model):
 
     def __str__(self):
         return self.user_name or self.user_id
+
+
+class ModelConfig(models.Model):
+    """AI模型配置表，用于管理简历解析模型"""
+    model_id = models.AutoField('模型ID', primary_key=True)
+    model_name = models.CharField('模型名称', max_length=255, blank=True, null=True)
+    endpoint_id = models.CharField('接入点ID', max_length=255, blank=True, null=True)
+    api_url = models.CharField('API地址', max_length=512, blank=True, null=True, default='https://ark.cn-beijing.volces.com/api/v3')
+    model_type = models.CharField('模型类型', max_length=50, blank=True, null=True)
+    is_active = models.BooleanField('是否启用', default=False)
+    description = models.CharField('模型描述', max_length=1024, blank=True, null=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = 'model_config'
+        verbose_name = '模型配置'
+        verbose_name_plural = '模型配置'
+
+    def __str__(self):
+        status = "【启用】" if self.is_active else "【禁用】"
+        return f"{status} {self.model_name} ({self.model_type})"

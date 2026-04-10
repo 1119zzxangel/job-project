@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from job.models import JobData, UserList, SpiderInfo, UserExpect, SendList
+from job.models import JobData, UserList, UserExpect, SendList, ModelConfig
 
 # 后台里面的认证和授权 可以隐藏掉
 from django.contrib import admin
@@ -37,56 +37,7 @@ class JobDataAdmin(admin.ModelAdmin):
 
 admin.site.register(JobData, JobDataAdmin)
 
-class SpiderInfoAdmin(admin.ModelAdmin):
-    list_display = ('spider_id', 'spider_name', 'count', 'page', 'last_run', 'status')
-    search_fields = ('spider_name',)
-    ordering = ['spider_id']
-    actions = ['delete_empty_spiders', 'mark_running', 'mark_idle', 'mark_success', 'mark_failed']
 
-    def delete_empty_spiders(self, request, queryset):
-        # 删除 count 和 page 都为空或为0 的记录
-        deleted = 0
-        for obj in queryset:
-            if not obj.count and not obj.page:
-                obj.delete()
-                deleted += 1
-        self.message_user(request, f"已删除 {deleted} 条空记录")
-    delete_empty_spiders.short_description = '删除空爬虫'
-
-    def mark_running(self, request, queryset):
-        updated = queryset.update(status='running')
-        self.message_user(request, f"已标记 {updated} 条为运行中")
-    mark_running.short_description = '标记为运行中'
-
-    def mark_idle(self, request, queryset):
-        updated = queryset.update(status='idle')
-        self.message_user(request, f"已标记 {updated} 条为空闲")
-    mark_idle.short_description = '标记为空闲'
-
-    def mark_success(self, request, queryset):
-        updated = queryset.update(status='success')
-        self.message_user(request, f"已标记 {updated} 条为成功")
-    mark_success.short_description = '标记为成功'
-
-    def mark_failed(self, request, queryset):
-        updated = queryset.update(status='failed')
-        self.message_user(request, f"已标记 {updated} 条为失败")
-    mark_failed.short_description = '标记为失败'
-
-    def changelist_view(self, request, extra_context=None):
-        extra_context = extra_context or {}
-        from job import tools
-        # 检查是否有爬虫正在运行
-        extra_context['spider_code'] = getattr(tools, 'spider_code', 0)
-        return super().changelist_view(request, extra_context)
-
-    class Media:
-        js = ('https://cdn.jsdelivr.net/npm/layui@2.7.6/dist/layui.js',)
-        css = {
-            'all': ('https://cdn.jsdelivr.net/npm/layui@2.7.6/dist/css/layui.css',)
-        }
-
-admin.site.register(SpiderInfo, SpiderInfoAdmin)
 
 class UserExpectAdmin(admin.ModelAdmin):
     list_display = ('expect_id', 'user', 'key_word', 'place', 'desired_salary', 'desired_experience', 'desired_education')
@@ -128,5 +79,27 @@ class SendListAdmin(admin.ModelAdmin):
     job_display.short_description = '岗位'
 
 admin.site.register(SendList, SendListAdmin)
+
+class ModelConfigAdmin(admin.ModelAdmin):
+    list_display = ('model_id', 'model_name', 'model_type', 'endpoint_id', 'api_url', 'is_active', 'created_at')
+    search_fields = ('model_name', 'endpoint_id', 'model_type', 'api_url')
+    list_filter = ('model_type', 'is_active')
+    ordering = ('-is_active', '-created_at')
+    actions = ['activate_model', 'deactivate_model']
+
+    def activate_model(self, request, queryset):
+        # 先将所有模型设置为非激活状态
+        ModelConfig.objects.update(is_active=False)
+        # 然后激活选中的模型
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f"已激活 {updated} 个模型，并将其他模型设置为非激活状态")
+    activate_model.short_description = '激活选中模型'
+
+    def deactivate_model(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f"已将 {updated} 个模型设置为非激活状态")
+    deactivate_model.short_description = '停用选中模型'
+
+admin.site.register(ModelConfig, ModelConfigAdmin)
 
 

@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <!-- 左侧：模型列表 -->
+        <div class="layui-col-md8">
+            <div class="layui-card">
+                <div class="layui-card-header">模型列表</div>
+                <div class="layui-card-body">
+                    <table class="layui-table" lay-size="sm">
+                        <thead>
+                            <tr>
+                                <th>模型ID</th>
+                                <th>模型名称</th>
+                                <th>模型类型</th>
+                                <th>接入点ID</th>
+                                <th>API地址</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for model in models %}
+                            <tr>
+                                <td>{{ model.model_id }}</td>
+                                <td>{{ model.model_name }}</td>
+                                <td>{{ model.model_type }}</td>
+                                <td>{{ model.endpoint_id }}</td>
+                                <td>{{ model.api_url|truncatechars:30 }}</td>
+                                <td>
+                                    {% if model.is_active %}
+                                        <span class="layui-badge layui-bg-green">启用中</span>
+                                    {% else %}
+                                        <span class="layui-badge layui-bg-gray">未启用</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not model.is_active %}
+                                        <button type="button" class="layui-btn layui-btn-xs layui-btn-normal switch-btn" data-model-id="{{ model.model_id }}">
+                                            切换
+                                        </button>
+                                    {% endif %}
+                                    <button type="button" class="layui-btn layui-btn-xs layui-btn-danger delete-btn" data-model-id="{{ model.model_id }}">
+                                        删除
+                                    </button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" style="text-align: center;">暂无模型配置</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧：添加/编辑模型 -->
+        <div class="layui-col-md4">
+            <div class="layui-card">
+                <div class="layui-card-header">添加模型</div>
+                <div class="layui-card-body">
+                    <div class="layui-form" lay-filter="">
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">模型名称</label>
+                            <div class="layui-input-block">
+                                <input type="text" name="model_name" class="layui-input" placeholder="如：DeepSeek-V3">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">接入点ID</label>
+                            <div class="layui-input-block">
+                                <input type="text" name="endpoint_id" class="layui-input" placeholder="如：ep-20260409190312-8bldb">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">API地址</label>
+                            <div class="layui-input-block">
+                                <input type="text" name="api_url" class="layui-input" placeholder="如：https://ark.cn-beijing.volces.com/api/v3" value="https://ark.cn-beijing.volces.com/api/v3">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">模型类型</label>
+                            <div class="layui-input-block">
+                                <select name="model_type" lay-verify="">
+                                    <option value="">请选择模型类型</option>
+                                    <option value="deepseek">DeepSeek</option>
+                                    <option value="doubao">豆包</option>
+                                    <option value="xunfei">讯飞</option>
+                                    <option value="other">其他</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">模型描述</label>
+                            <div class="layui-input-block">
+                                <textarea name="description" class="layui-textarea" placeholder="可选：模型描述信息"></textarea>
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <div class="layui-input-block">
+                                <button type="button" class="layui-btn" lay-submit lay-filter="add_model" id="add_model">添加模型</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 当前使用模型提示 -->
+            <div class="layui-card">
+                <div class="layui-card-header">当前配置</div>
+                <div class="layui-card-body">
+                    <p><strong>API密钥：</strong>从 .env 文件读取 (VOLCANO_API_KEY)</p>
+                    <p><strong>当前模型：</strong>
+                        {% if current_model %}
+                            {{ current_model.model_name }} ({{ current_model.model_type }})
+                        {% else %}
+                            未配置
+                        {% endif %}
+                    </p>
+                    <p style="color: #999; font-size: 12px; margin-top: 10px;">
+                        提示：模型配置保存在数据库中，API密钥保存在.env文件中。切换模型后会自动更新环境变量中的接入点ID。
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+layui.config({
+    base: '{% static "layuiadmin/" %}'
+}).extend({
+    index: 'lib/index'
+}).use(['index', 'form', 'jquery', 'layer'], function () {
+    var $ = layui.$,
+        layer = layui.layer,
+        form = layui.form;
+
+    // 添加模型
+    form.on('submit(add_model)', function (data) {
+        var field = data.field;
+        if (!field.model_name) { layer.msg("模型名称不能为空！"); return false; }
+        if (!field.endpoint_id) { layer.msg("接入点ID不能为空！"); return false; }
+        if (!field.model_type) { layer.msg("模型类型不能为空！"); return false; }
+
+        $.ajax({
+            type: 'POST',
+            url: '/add_model/',
+            data: field,
+            success: function (res) {
+                layer.msg(res.msg);
+                if (res.code === 0) setTimeout(() => location.reload(), 1000);
+            },
+            error: () => layer.msg("添加失败")
+        });
+        return false;
+    });
+
+    // 切换模型
+    $(document).on('click', '.switch-btn', function () {
+        var modelId = $(this).data('model-id');
+        layer.confirm("确定切换到该模型吗？", function (idx) {
+            $.ajax({
+                type: 'POST',
+                url: '/switch_model/',
+                data: { model_id: modelId },
+                success: res => {
+                    layer.msg(res.msg);
+                    if (res.code === 0) setTimeout(() => location.reload(), 1000);
+                },
+                error: () => layer.msg("切换失败")
+            });
+            layer.close(idx);
+        });
+    });
+
+    // 删除模型
+    $(document).on('click', '.delete-btn', function () {
+        var modelId = $(this).data('model-id');
+        layer.confirm("确定删除该模型吗？", function (idx) {
+            $.ajax({
+                type: 'POST',
+                url: '/delete_model/',
+                data: { model_id: modelId },
+                success: res => {
+                    layer.msg(res.msg);
+                    if (res.code === 0) setTimeout(() => location.reload(), 1000);
+                },
+                error: () => layer.msg("删除失败")
+            });
+            layer.close(idx);
+        });
+    });
+});
+</script>
+{% endblock %}

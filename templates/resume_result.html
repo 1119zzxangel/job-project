@@ -11,10 +11,20 @@
                         <div style="margin-bottom:16px;">
                             <strong>简历解析摘要：</strong>
                             {% if resume %}
+                                {% if resume.parse_method == 'llm' %}
+                                    <span class="layui-badge layui-bg-blue">大模型解析成功</span>
+                                {% elif resume.parse_method == 'keyword' %}
+                                    <span class="layui-badge layui-bg-green">关键字解析成功</span>
+                                {% elif resume.parse_status == 'error' %}
+                                    <span class="layui-badge layui-bg-red">解析错误</span>
+                                {% endif %}
+                                <br>
                                 学历：{{ resume.education }}；经验：{{ resume.total_experience_years }} 年；技能：
                                 {% for s in resume.skills %}
                                     <span class="layui-badge layui-bg-green">{{ s }}</span>
                                 {% endfor %}
+                            {% else %}
+                                <span class="layui-badge layui-bg-red">解析错误</span>
                             {% endif %}
                         </div>
                         <table class="layui-table">
@@ -87,6 +97,7 @@
 {% endblock %}
 
 {% block js %}
+    {{ results|json_script:"results_data" }}
     <script>
         layui.config({
             base: '{% static "layuiadmin/" %}' //静态资源所在路径
@@ -96,10 +107,13 @@
             var $ = layui.$,
                 table = layui.table;
 
+            // 获取数据
+            var resultsData = JSON.parse(document.getElementById('results_data').textContent);
+
             // 渲染表格
             table.render({
                 elem: '.layui-table',
-                data: {{ results|safe }},
+                data: resultsData,
                 page: true,
                 limit: 10
             });

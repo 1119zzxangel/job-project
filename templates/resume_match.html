@@ -65,7 +65,67 @@
                     layer.msg("请选择要上传的简历文件！");
                     return false;
                 }
-                return true;
+                
+                // 显示加载提示
+                var loading = layer.load(2, {
+                    shade: [0.3, '#333'],
+                    content: '正在解析简历...',
+                    time: 0
+                });
+                
+                // 构建表单数据
+                var formData = new FormData();
+                formData.append('resume', file);
+                formData.append('csrfmiddlewaretoken', $('input[name="csrfmiddlewaretoken"]').val());
+                
+                // 发送异步请求
+                $.ajax({
+                    url: '/upload_resume/',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        if (response.code === 0) {
+                            var taskId = response.task_id;
+                            console.log('任务ID:', taskId);
+                            
+                            // 开始轮询任务状态
+                            var pollingInterval = setInterval(function() {
+                                $.get('/check_task_status/', { task_id: taskId }, function(statusResponse) {
+                                    if (statusResponse.code === 0) {
+                                        if (statusResponse.status === 'completed') {
+                                            clearInterval(pollingInterval);
+                                            layer.close(loading);
+                                            
+                                            // 跳转到结果页面
+                                            window.location.href = '/match_report/';
+                                        } else if (statusResponse.status === 'processing') {
+                                            console.log('任务处理中...');
+                                        }
+                                    } else {
+                                        clearInterval(pollingInterval);
+                                        layer.close(loading);
+                                        layer.msg('任务处理失败：' + statusResponse.msg, { icon: 5 });
+                                    }
+                                }).fail(function() {
+                                    clearInterval(pollingInterval);
+                                    layer.close(loading);
+                                    layer.msg('检查任务状态失败，请刷新页面重试', { icon: 5 });
+                                });
+                            }, 2000); // 每2秒轮询一次
+                        } else {
+                            layer.close(loading);
+                            layer.msg('上传失败：' + response.msg, { icon: 5 });
+                        }
+                    },
+                    error: function() {
+                        layer.close(loading);
+                        layer.msg('上传失败，请重试', { icon: 5 });
+                    }
+                });
+                
+                return false;
             });
         });
     </script>

@@ -36,16 +36,43 @@ layui.define(["table", "form"], function(e) {
 			},  {
 				field: "company",
 				title: "公司名称"
-			},{
+			},{  
+				field: "required_skills",
+				title: "技能要求",
+				width: 200,
+				templet: function(d) {
+					if (d.required_skills) {
+						var skills = d.required_skills.split(',');
+						var html = '';
+						for (var i = 0; i < skills.length; i++) {
+							html += '<span class="layui-badge layui-bg-blue">' + skills[i].trim() + '</span> ';
+						}
+						return html;
+					} else {
+						return '无';
+					}
+				}
+			},{  
+				field: "href",
+				title: "岗位链接",
+				width: 100,
+				templet: function(d) {
+					if (d.href) {
+						return '<a href="' + d.href + '" target="_blank" class="layui-btn layui-btn-xs layui-btn-primary">查看</a>';
+					} else {
+						return '无';
+					}
+				}
+			},{  
 				field: "label",
 				title: "所属行业",
 				width: 150,
-			},{
+			},{  
 				field: "scale",
 				title: "公司规模",
 				width: 150,
 				align: "left"
-			},{
+			},{  
 				title: "操作",
 				width: 130,
 				align: "center",
